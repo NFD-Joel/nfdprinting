@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D-Druck Preisrechner</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --card2: #21252e;
+    --border: #2c313c;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #4f8cff;
+    --accent2: #34d399;
+    --danger: #ef4444;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 16px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 16px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .field { margin-bottom: 0; }
+  .full { grid-column: 1 / -1; }
+
+  /* Ergebnis */
+  .result-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .result-table td { padding: 5px 0; font-size: 0.9rem; }
+  .result-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .result-table tr.sub-row td { color: var(--muted); }
+  .result-table tr.divider td { border-top: 1px solid var(--border); padding-top: 8px; }
+  .price-box {
+    background: var(--card2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 6px;
+  }
+  .price-box.total { background: linear-gradient(135deg, #16361f, #173a2a); border: 1px solid #25543a; }
+  .price-box .lbl { font-size: 0.85rem; color: var(--muted); }
+  .price-box .val { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .price-box.total .val { color: var(--accent2); font-size: 1.8rem; }
+
+  /* Collapsible */
+  details { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+  details > summary {
+    list-style: none; cursor: pointer; padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center; user-select: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after { content: "▸"; color: var(--muted); transition: transform 0.15s; }
+  details[open] > summary::after { transform: rotate(90deg); }
+  .details-body { padding: 0 16px 16px; }
+
+  /* Profil-Listen */
+  .profile-row { display: flex; gap: 8px; align-items: end; margin-bottom: 8px; }
+  .profile-row .field { flex: 1; }
+  .profile-list { margin: 4px 0 14px; }
+  .profile-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--card2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-size: 0.88rem;
+  }
+  .profile-item .meta { color: var(--muted); font-size: 0.8rem; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 9px 14px; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.del { background: transparent; color: var(--danger); padding: 4px 8px; font-size: 1.1rem; line-height: 1; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .row-label { font-size: 0.78rem; color: var(--muted); margin: 14px 0 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  @media (max-width: 520px) {
+    .grid, .grid-3 { grid-template-columns: 1fr 1fr; }
+    .price-box .val { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🖨️ 3D-Druck Preisrechner</h1>
+  <p class="sub">Auftragsdaten eingeben → Verkaufspreis in Guaraní. Daten bleiben lokal im Browser.</p>
+
+  <!-- ===== RECHNER ===== -->
+  <div class="card">
+    <div class="grid">
+      <div class="field full">
+        <label>Filament</label>
+        <select id="filamentSel"></select>
+      </div>
+      <div class="field">
+        <label>Gewicht (g)</label>
+        <input type="number" id="weight" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Filamentpreis (₲/kg)</label>
+        <input type="number" id="pricePerKg" min="0" step="1000" placeholder="0">
+      </div>
+
+      <div class="field full">
+        <label>Drucker</label>
+        <select id="printerSel"></select>
+      </div>
+      <div class="field">
+        <label>Leistung (W)</label>
+        <input type="number" id="watts" min="0" step="10" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Maschinen-Satz (₲/h)</label>
+        <input type="number" id="machineRate" min="0" step="500" placeholder="0">
+      </div>
+
+      <div class="field">
+        <label>Druckzeit — Stunden</label>
+        <input type="number" id="printH" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Druckzeit — Minuten</label>
+        <input type="number" id="printM" min="0" max="59" step="1" placeholder="0">
+      </div>
+
+      <div class="field">
+        <label>Arbeit / Nachbearbeitung (min)</label>
+        <input type="number" id="laborMin" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Stundenlohn (₲/h)</label>
+        <input type="number" id="laborRate" min="0" step="1000" placeholder="0">
+      </div>
+
+      <div class="field">
+        <label>Fehldruck-Aufschlag (%)</label>
+        <input type="number" id="riskPct" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Gewinn-Marge (%)</label>
+        <input type="number" id="marginPct" min="0" step="1" placeholder="0">
+      </div>
+
+      <div class="field full">
+        <label>Anzahl (Stück)</label>
+        <input type="number" id="qty" min="1" step="1" value="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ERGEBNIS ===== -->
+  <div class="card">
+    <h2>Aufschlüsselung</h2>
+    <table class="result-table">
+      <tbody>
+        <tr><td>Material</td><td id="rMaterial">₲ 0</td></tr>
+        <tr><td>Strom</td><td id="rPower">₲ 0</td></tr>
+        <tr><td>Maschine (Verschleiß)</td><td id="rMachine">₲ 0</td></tr>
+        <tr><td>Arbeit</td><td id="rLabor">₲ 0</td></tr>
+        <tr class="divider"><td>Selbstkosten</td><td id="rCost">₲ 0</td></tr>
+        <tr class="sub-row"><td>+ Risiko-Aufschlag</td><td id="rRisk">₲ 0</td></tr>
+        <tr class="sub-row"><td>+ Gewinn-Marge</td><td id="rMargin">₲ 0</td></tr>
+      </tbody>
+    </table>
+    <div class="price-box">
+      <span class="lbl">Preis pro Stück</span>
+      <span class="val" id="rUnit">₲ 0</span>
+    </div>
+    <div class="price-box total">
+      <span class="lbl">Gesamtpreis (<span id="rQtyLbl">1</span>×)</span>
+      <span class="val" id="rTotal">₲ 0</span>
+    </div>
+  </div>
+
+  <!-- ===== PROFILE ===== -->
+  <details>
+    <summary><h2>Profile</h2></summary>
+    <div class="details-body">
+      <div class="row-label">Filamente</div>
+      <div class="profile-list" id="filamentList"></div>
+      <div class="profile-row">
+        <div class="field" style="flex:2"><label>Name</label><input type="text" id="newFilName" placeholder="z.B. PLA Grau"></div>
+        <div class="field"><label>Preis (₲/kg)</label><input type="number" id="newFilPrice" min="0" step="1000" placeholder="120000"></div>
+        <button id="addFilament">+</button>
+      </div>
+
+      <div class="row-label">Drucker</div>
+      <div class="profile-list" id="printerList"></div>
+      <div class="profile-row">
+        <div class="field" style="flex:2"><label>Name</label><input type="text" id="newPrtName" placeholder="z.B. Ender 3"></div>
+        <div class="field"><label>Watt</label><input type="number" id="newPrtWatts" min="0" step="10" placeholder="200"></div>
+        <div class="field"><label>₲/h</label><input type="number" id="newPrtRate" min="0" step="500" placeholder="3000"></div>
+        <button id="addPrinter">+</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- ===== EINSTELLUNGEN ===== -->
+  <details>
+    <summary><h2>Einstellungen</h2></summary>
+    <div class="details-body">
+      <div class="grid">
+        <div class="field"><label>Strompreis (₲/kWh)</label><input type="number" id="setKwh" min="0" step="10"></div>
+        <div class="field"><label>Standard Stundenlohn (₲/h)</label><input type="number" id="setLabor" min="0" step="1000"></div>
+        <div class="field"><label>Standard Fehldruck (%)</label><input type="number" id="setRisk" min="0" step="1"></div>
+        <div class="field"><label>Standard Marge (%)</label><input type="number" id="setMargin" min="0" step="1"></div>
+        <div class="field full">
+          <label>Rundung Endpreis</label>
+          <select id="setRound">
+            <option value="500">auf ₲ 500</option>
+            <option value="1000">auf ₲ 1.000</option>
+            <option value="0">keine</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint">Diese Werte werden als Vorgabe für neue Berechnungen benutzt.</p>
+      <button class="ghost" id="resetAll" style="margin-top:10px">Alles zurücksetzen</button>
+    </div>
+  </details>
+
+  <p class="sub" style="text-align:center">Alle Daten liegen nur in diesem Browser (localStorage).</p>
+</div>
+
+<script>
+"use strict";
+
+const STORE_KEY = "nfdprinting";
+
+const DEFAULTS = {
+  filaments: [
+    { name: "PLA Grau", pricePerKg: 120000 },
+    { name: "PETG Schwarz", pricePerKg: 160000 }
+  ],
+  printers: [
+    { name: "Ender 3", watts: 200, rate: 3000 }
+  ],
+  settings: { kwh: 350, laborRate: 25000, risk: 10, margin: 50, round: 500 }
+};
+
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return structuredClone(DEFAULTS);
+    const parsed = JSON.parse(raw);
+    return {
+      filaments: Array.isArray(parsed.filaments) ? parsed.filaments : structuredClone(DEFAULTS.filaments),
+      printers: Array.isArray(parsed.printers) ? parsed.printers : structuredClone(DEFAULTS.printers),
+      settings: Object.assign(structuredClone(DEFAULTS.settings), parsed.settings || {})
+    };
+  } catch (e) {
+    return structuredClone(DEFAULTS);
+  }
+}
+
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+// --- Währungsformat (Guaraní, ohne Nachkommastellen) ---
+let pygFmt;
+try {
+  pygFmt = new Intl.NumberFormat("es-PY", { style: "currency", currency: "PYG", maximumFractionDigits: 0 });
+} catch (e) { pygFmt = null; }
+
+function fmt(n) {
+  if (!isFinite(n)) n = 0;
+  n = Math.round(n);
+  if (pygFmt) return pygFmt.format(n);
+  // Fallback: manueller Tausenderpunkt
+  return "₲ " + n.toLocaleString("de-DE");
+}
+
+const $ = id => document.getElementById(id);
+const num = id => { const v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : 0; };
+
+// --- Berechnung ---
+function calc() {
+  const weight = num("weight");
+  const pricePerKg = num("pricePerKg");
+  const watts = num("watts");
+  const machineRate = num("machineRate");
+  const printH = num("printH") + num("printM") / 60;
+  const laborMin = num("laborMin");
+  const laborRate = num("laborRate");
+  const riskPct = num("riskPct");
+  const marginPct = num("marginPct");
+  const qty = Math.max(1, Math.floor(num("qty") || 1));
+  const kwh = state.settings.kwh || 0;
+
+  const material = (weight / 1000) * pricePerKg;
+  const power = (watts / 1000) * printH * kwh;
+  const machine = printH * machineRate;
+  const labor = (laborMin / 60) * laborRate;
+
+  const cost = material + power + machine + labor;
+  const risk = cost * (riskPct / 100);
+  const margin = (cost + risk) * (marginPct / 100);
+
+  let unit = cost + risk + margin;
+  const r = state.settings.round || 0;
+  if (r > 0) unit = Math.ceil(unit / r) * r;
+  const total = unit * qty;
+
+  $("rMaterial").textContent = fmt(material);
+  $("rPower").textContent = fmt(power);
+  $("rMachine").textContent = fmt(machine);
+  $("rLabor").textContent = fmt(labor);
+  $("rCost").textContent = fmt(cost);
+  $("rRisk").textContent = fmt(risk);
+  $("rMargin").textContent = fmt(margin);
+  $("rUnit").textContent = fmt(unit);
+  $("rTotal").textContent = fmt(total);
+  $("rQtyLbl").textContent = qty;
+}
+
+// --- Dropdowns aus Profilen füllen ---
+function renderSelects() {
+  const fSel = $("filamentSel");
+  const pSel = $("printerSel");
+  fSel.innerHTML = '<option value="">— Filament wählen / manuell —</option>';
+  state.filaments.forEach((f, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = `${f.name} (${fmt(f.pricePerKg)}/kg)`;
+    fSel.appendChild(o);
+  });
+  pSel.innerHTML = '<option value="">— Drucker wählen / manuell —</option>';
+  state.printers.forEach((p, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = `${p.name} (${p.watts} W, ${fmt(p.rate)}/h)`;
+    pSel.appendChild(o);
+  });
+}
+
+// --- Profil-Listen rendern ---
+function renderLists() {
+  const fl = $("filamentList");
+  fl.innerHTML = "";
+  state.filaments.forEach((f, i) => {
+    const div = document.createElement("div");
+    div.className = "profile-item";
+    div.innerHTML = `<span>${escapeHtml(f.name)} <span class="meta">— ${fmt(f.pricePerKg)}/kg</span></span>`;
+    const btn = document.createElement("button");
+    btn.className = "del"; btn.textContent = "×"; btn.title = "Löschen";
+    btn.onclick = () => { state.filaments.splice(i, 1); save(); renderAll(); };
+    div.appendChild(btn);
+    fl.appendChild(div);
+  });
+
+  const pl = $("printerList");
+  pl.innerHTML = "";
+  state.printers.forEach((p, i) => {
+    const div = document.createElement("div");
+    div.className = "profile-item";
+    div.innerHTML = `<span>${escapeHtml(p.name)} <span class="meta">— ${p.watts} W, ${fmt(p.rate)}/h</span></span>`;
+    const btn = document.createElement("button");
+    btn.className = "del"; btn.textContent = "×"; btn.title = "Löschen";
+    btn.onclick = () => { state.printers.splice(i, 1); save(); renderAll(); };
+    div.appendChild(btn);
+    pl.appendChild(div);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function renderAll() {
+  renderSelects();
+  renderLists();
+  calc();
+}
+
+// --- Events: Rechner-Felder ---
+["weight","pricePerKg","watts","machineRate","printH","printM","laborMin","laborRate","riskPct","marginPct","qty"]
+  .forEach(id => $(id).addEventListener("input", calc));
+
+// Dropdown füllt Felder
+$("filamentSel").addEventListener("change", e => {
+  const f = state.filaments[e.target.value];
+  if (f) $("pricePerKg").value = f.pricePerKg;
+  calc();
+});
+$("printerSel").addEventListener("change", e => {
+  const p = state.printers[e.target.value];
+  if (p) { $("watts").value = p.watts; $("machineRate").value = p.rate; }
+  calc();
+});
+
+// --- Profile hinzufügen ---
+$("addFilament").addEventListener("click", () => {
+  const name = $("newFilName").value.trim();
+  const price = parseFloat($("newFilPrice").value);
+  if (!name || !(price >= 0)) return;
+  state.filaments.push({ name, pricePerKg: price });
+  save(); $("newFilName").value = ""; $("newFilPrice").value = ""; renderAll();
+});
+$("addPrinter").addEventListener("click", () => {
+  const name = $("newPrtName").value.trim();
+  const watts = parseFloat($("newPrtWatts").value);
+  const rate = parseFloat($("newPrtRate").value);
+  if (!name || !(watts >= 0) || !(rate >= 0)) return;
+  state.printers.push({ name, watts, rate });
+  save(); $("newPrtName").value = ""; $("newPrtWatts").value = ""; $("newPrtRate").value = ""; renderAll();
+});
+
+// --- Einstellungen ---
+function loadSettingsUI() {
+  $("setKwh").value = state.settings.kwh;
+  $("setLabor").value = state.settings.laborRate;
+  $("setRisk").value = state.settings.risk;
+  $("setMargin").value = state.settings.margin;
+  $("setRound").value = String(state.settings.round);
+}
+function applyDefaultsToForm() {
+  // Vorbelegen, aber bereits eingegebene Werte nicht überschreiben
+  if (!$("laborRate").value) $("laborRate").value = state.settings.laborRate;
+  if (!$("riskPct").value) $("riskPct").value = state.settings.risk;
+  if (!$("marginPct").value) $("marginPct").value = state.settings.margin;
+}
+[["setKwh","kwh"],["setLabor","laborRate"],["setRisk","risk"],["setMargin","margin"]].forEach(([id,key]) => {
+  $(id).addEventListener("input", () => {
+    const v = parseFloat($(id).value);
+    state.settings[key] = isFinite(v) ? v : 0;
+    save(); calc();
+  });
+});
+$("setRound").addEventListener("change", () => {
+  state.settings.round = parseInt($("setRound").value, 10) || 0;
+  save(); calc();
+});
+
+$("resetAll").addEventListener("click", () => {
+  if (!confirm("Alle Profile und Einstellungen zurücksetzen?")) return;
+  localStorage.removeItem(STORE_KEY);
+  state = load();
+  loadSettingsUI();
+  // Formular-Defaults neu setzen
+  $("laborRate").value = state.settings.laborRate;
+  $("riskPct").value = state.settings.risk;
+  $("marginPct").value = state.settings.margin;
+  renderAll();
+});
+
+// --- Init ---
+loadSettingsUI();
+applyDefaultsToForm();
+renderAll();
+</script>
+</body>
+</html>

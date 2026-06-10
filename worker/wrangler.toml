@@ -1,0 +1,9 @@
+name = "nfdprinting"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# KV-Namespace für den gemeinsamen Zustand.
+# id wird von `npx wrangler kv namespace create KV` erzeugt — hier eintragen.
+[[kv_namespaces]]
+binding = "KV"
+id = "1452f23ea8614077b553b3ea47b86f6a"

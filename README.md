@@ -14,8 +14,9 @@ Auftragsdaten eingeben → Preis aktualisiert sich live:
 - **Fehldruck-% + Marge-%** → Aufschläge
 - **Anzahl** → Gesamtpreis
 
-Alle Daten (Profile + Einstellungen) liegen lokal im Browser (`localStorage`) —
-nichts wird hochgeladen. Pro Browser/Gerät getrennt.
+Alle Daten (Profile + Einstellungen) liegen standardmäßig lokal im Browser (`localStorage`) —
+nichts wird hochgeladen. Pro Browser/Gerät getrennt. Optional lässt sich das per
+[Sync](#sync-geräteübergreifend) auf alle Geräte ausweiten.
 
 ## Preisformel
 
@@ -43,8 +44,20 @@ Gesamtpreis   = Preis/Stück × Anzahl
 Defaults beim ersten Start (anpassbar): Strompreis ₲ 350/kWh (ANDE),
 Stundenlohn ₲ 25.000/h, Fehldruck 10 %, Marge 50 %.
 
-## Später hosten (optional)
+## Sync (geräteübergreifend)
 
-Da es eine statische Datei ist, kannst du sie jederzeit auf dem Debian-VM servieren,
-z. B. mit einem kleinen nginx-Container, und per Tailscale erreichen. Für jetzt
-reicht das lokale Öffnen.
+Standardmäßig liegt alles nur im jeweiligen Browser (`localStorage`) — jedes Gerät hat
+seine eigene Liste. Damit Filamente/Drucker auf **allen** Geräten gleich sind, gibt es ein
+optionales Sync-Backend auf Basis eines **Cloudflare Workers + KV** (kostenlos, immer online).
+
+So aktivieren:
+
+1. Worker deployen — siehe [`worker/README.md`](worker/README.md):
+   `npx wrangler login` → `kv namespace create KV` → `secret put API_TOKEN` → `deploy`.
+2. Die ausgegebene `https://nfdprinting.<sub>.workers.dev`-URL in `index.html` als
+   `API_BASE` eintragen, committen, pushen (GitHub Pages aktualisiert sich).
+3. Auf jedem Gerät unter **Einstellungen → Sync-Token** denselben `API_TOKEN` eingeben.
+
+Danach gilt: Filament/Drucker auf einem Gerät hinzufügen → erscheint nach Reload auf den
+anderen. Ohne eingetragenen Token bleibt alles lokal (offline-fähig wie bisher).
+Konfliktlösung ist *last-write-wins* — für einen Einzelnutzer mit ein paar Geräten passt das.

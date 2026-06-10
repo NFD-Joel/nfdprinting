@@ -246,6 +246,15 @@
         </div>
       </div>
       <p class="hint">Diese Werte werden als Vorgabe für neue Berechnungen benutzt.</p>
+
+      <div class="row-label">Sync (geräteübergreifend)</div>
+      <div class="field full">
+        <label>Sync-Token</label>
+        <input type="password" id="setToken" placeholder="Token eingeben, um Geräte zu verbinden">
+      </div>
+      <p class="hint">Gleicher Token = gleiche Filament-/Drucker-Liste auf allen Geräten.
+        Leer lassen = nur dieses Gerät (lokal). Status: <span id="syncStatus">Lokal</span></p>
+
       <button class="ghost" id="resetAll" style="margin-top:10px">Alles zurücksetzen</button>
     </div>
   </details>
@@ -257,6 +266,14 @@
 "use strict";
 
 const STORE_KEY = "nfdprinting";
+const TOKEN_KEY = "nfdprinting_token";
+
+// Nach dem Worker-Deploy hier die ausgegebene URL eintragen
+// (z.B. "https://nfdprinting.dein-subdomain.workers.dev"). Leer = nur lokal.
+const API_BASE = "https://nfdprinting.xaytag.workers.dev";
+
+const getToken = () => (localStorage.getItem(TOKEN_KEY) || "").trim();
+const syncEnabled = () => !!(API_BASE && getToken());
 
 const DEFAULTS = {
   filaments: [
@@ -288,6 +305,69 @@ function load() {
 
 function save() {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  pushCloud();
+}
+
+// --- Cloud-Sync (Cloudflare Worker) ---
+function setSyncStatus(text) {
+  const el = $("syncStatus");
+  if (el) el.textContent = text;
+}
+
+async function apiFetch(method, body) {
+  return fetch(API_BASE + "/data", {
+    method,
+    headers: {
+      "Authorization": "Bearer " + getToken(),
+      ...(body ? { "Content-Type": "application/json" } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+}
+
+let pushTimer = null;
+function pushCloud() {
+  if (!syncEnabled()) return;
+  clearTimeout(pushTimer);
+  setSyncStatus("Speichere …");
+  pushTimer = setTimeout(async () => {
+    try {
+      const res = await apiFetch("PUT", state);
+      setSyncStatus(res.ok ? "Synchronisiert" : (res.status === 401 ? "Token ungültig" : "Fehler"));
+    } catch (e) {
+      setSyncStatus("Offline");
+    }
+  }, 600);
+}
+
+async function pullCloud() {
+  if (!syncEnabled()) { setSyncStatus("Lokal"); return; }
+  setSyncStatus("Lade …");
+  try {
+    const res = await apiFetch("GET");
+    if (res.status === 401) { setSyncStatus("Token ungültig"); return; }
+    if (!res.ok) { setSyncStatus("Fehler"); return; }
+    const data = await res.json();
+    if (data && Array.isArray(data.filaments) && Array.isArray(data.printers)) {
+      // Cloud hat Daten -> als Quelle der Wahrheit übernehmen
+      state = {
+        filaments: data.filaments,
+        printers: data.printers,
+        settings: Object.assign(structuredClone(DEFAULTS.settings), data.settings || {})
+      };
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      loadSettingsUI();
+      applyDefaultsToForm();
+      renderAll();
+      setSyncStatus("Synchronisiert");
+    } else {
+      // Cloud leer -> lokalen Zustand hochladen (Seed)
+      const res2 = await apiFetch("PUT", state);
+      setSyncStatus(res2.ok ? "Synchronisiert" : "Fehler");
+    }
+  } catch (e) {
+    setSyncStatus("Offline");
+  }
 }
 
 // --- Währungsformat (Guaraní, ohne Nachkommastellen) ---
@@ -444,6 +524,7 @@ function loadSettingsUI() {
   $("setRisk").value = state.settings.risk;
   $("setMargin").value = state.settings.margin;
   $("setRound").value = String(state.settings.round);
+  $("setToken").value = getToken();
 }
 function applyDefaultsToForm() {
   // Vorbelegen, aber bereits eingegebene Werte nicht überschreiben
@@ -463,22 +544,37 @@ $("setRound").addEventListener("change", () => {
   save(); calc();
 });
 
+// Sync-Token speichern -> sofort mit Cloud abgleichen
+$("setToken").addEventListener("change", () => {
+  const t = $("setToken").value.trim();
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+  if (!API_BASE) { setSyncStatus("Kein Server (API_BASE leer)"); return; }
+  pullCloud();
+});
+
 $("resetAll").addEventListener("click", () => {
-  if (!confirm("Alle Profile und Einstellungen zurücksetzen?")) return;
+  if (!confirm("Alle Profile und Einstellungen auf diesem Gerät zurücksetzen?")) return;
   localStorage.removeItem(STORE_KEY);
   state = load();
+  // Sync nur überschreiben, wenn der Nutzer es ausdrücklich bestätigt
+  const pushReset = syncEnabled() &&
+    confirm("Auch die geräteübergreifende (Cloud-)Liste mit den Standardwerten überschreiben?");
   loadSettingsUI();
   // Formular-Defaults neu setzen
   $("laborRate").value = state.settings.laborRate;
   $("riskPct").value = state.settings.risk;
   $("marginPct").value = state.settings.margin;
   renderAll();
+  if (pushReset) pushCloud();         // Cloud absichtlich überschreiben
+  else if (syncEnabled()) pullCloud(); // Cloud behalten -> wieder einlesen
 });
 
 // --- Init ---
 loadSettingsUI();
 applyDefaultsToForm();
 renderAll();
+pullCloud();
 </script>
 </body>
 </html>

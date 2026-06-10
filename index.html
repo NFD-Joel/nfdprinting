@@ -248,8 +248,12 @@
       <p class="hint">Diese Werte werden als Vorgabe für neue Berechnungen benutzt.</p>
 
       <div class="row-label">Sync (geräteübergreifend)</div>
-      <p class="hint">Filamente, Drucker und Einstellungen werden automatisch auf allen
-        Geräten synchronisiert. Status: <span id="syncStatus">…</span></p>
+      <div class="field full">
+        <label>Sync-Token</label>
+        <input type="password" id="setToken" placeholder="Token eingeben, um Geräte zu verbinden">
+      </div>
+      <p class="hint">Gleicher Token = gleiche Filament-/Drucker-Liste auf allen Geräten.
+        Leer lassen = nur dieses Gerät (lokal). Status: <span id="syncStatus">Lokal</span></p>
 
       <button class="ghost" id="resetAll" style="margin-top:10px">Alles zurücksetzen</button>
     </div>
@@ -262,15 +266,14 @@
 "use strict";
 
 const STORE_KEY = "nfdprinting";
+const TOKEN_KEY = "nfdprinting_token";
 
-// Sync-Backend (Cloudflare Worker + KV). Token ist fest hinterlegt, damit alle
-// Geräte automatisch synchronisieren — ohne manuelles Eintragen.
-// Hinweis: dadurch ist der Token öffentlich (im Seitenquelltext) einsehbar.
+// Nach dem Worker-Deploy hier die ausgegebene URL eintragen
+// (z.B. "https://nfdprinting.dein-subdomain.workers.dev"). Leer = nur lokal.
 const API_BASE = "https://nfdprinting.xaytag.workers.dev";
-const API_TOKEN = "0655164";
 
-const getToken = () => API_TOKEN;
-const syncEnabled = () => !!(API_BASE && API_TOKEN);
+const getToken = () => (localStorage.getItem(TOKEN_KEY) || "").trim();
+const syncEnabled = () => !!(API_BASE && getToken());
 
 const DEFAULTS = {
   filaments: [
@@ -521,6 +524,7 @@ function loadSettingsUI() {
   $("setRisk").value = state.settings.risk;
   $("setMargin").value = state.settings.margin;
   $("setRound").value = String(state.settings.round);
+  $("setToken").value = getToken();
 }
 function applyDefaultsToForm() {
   // Vorbelegen, aber bereits eingegebene Werte nicht überschreiben
@@ -538,6 +542,15 @@ function applyDefaultsToForm() {
 $("setRound").addEventListener("change", () => {
   state.settings.round = parseInt($("setRound").value, 10) || 0;
   save(); calc();
+});
+
+// Sync-Token speichern -> sofort mit Cloud abgleichen
+$("setToken").addEventListener("change", () => {
+  const t = $("setToken").value.trim();
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+  if (!API_BASE) { setSyncStatus("Kein Server (API_BASE leer)"); return; }
+  pullCloud();
 });
 
 $("resetAll").addEventListener("click", () => {

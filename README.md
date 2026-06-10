@@ -46,18 +46,16 @@ Stundenlohn ₲ 25.000/h, Fehldruck 10 %, Marge 50 %.
 
 ## Sync (geräteübergreifend)
 
-Standardmäßig liegt alles nur im jeweiligen Browser (`localStorage`) — jedes Gerät hat
-seine eigene Liste. Damit Filamente/Drucker auf **allen** Geräten gleich sind, gibt es ein
-optionales Sync-Backend auf Basis eines **Cloudflare Workers + KV** (kostenlos, immer online).
+Filamente, Drucker und Einstellungen werden **automatisch auf allen Geräten** synchronisiert,
+über ein **Cloudflare Worker + KV**-Backend (kostenlos, immer online). Nichts einzustellen:
+Seite öffnen → Status unter *Einstellungen* zeigt „Synchronisiert". Lokal (`localStorage`)
+dient als Offline-Cache. Filament auf einem Gerät hinzufügen → erscheint nach Reload auf den
+anderen. Konfliktlösung ist *last-write-wins* — für einen Einzelnutzer mit ein paar Geräten passt das.
 
-So aktivieren:
+**Sicherheits-Hinweis:** Damit es ohne manuelles Login funktioniert, liegt der `API_TOKEN`
+fest in `index.html` (`API_TOKEN`-Konstante) und ist damit im öffentlichen Seitenquelltext
+sichtbar. Wer die Worker-URL findet, kann die Liste lesen/überschreiben. Bei Missbrauch:
+neuen `API_TOKEN` setzen (`npx wrangler@3 secret put API_TOKEN`) und in `index.html` ersetzen.
 
-1. Worker deployen — siehe [`worker/README.md`](worker/README.md):
-   `npx wrangler login` → `kv namespace create KV` → `secret put API_TOKEN` → `deploy`.
-2. Die ausgegebene `https://nfdprinting.<sub>.workers.dev`-URL in `index.html` als
-   `API_BASE` eintragen, committen, pushen (GitHub Pages aktualisiert sich).
-3. Auf jedem Gerät unter **Einstellungen → Sync-Token** denselben `API_TOKEN` eingeben.
-
-Danach gilt: Filament/Drucker auf einem Gerät hinzufügen → erscheint nach Reload auf den
-anderen. Ohne eingetragenen Token bleibt alles lokal (offline-fähig wie bisher).
-Konfliktlösung ist *last-write-wins* — für einen Einzelnutzer mit ein paar Geräten passt das.
+Backend deployen/neu aufsetzen — siehe [`worker/README.md`](worker/README.md). Wichtig: Bei
+Node < 22 `npx wrangler@3` statt `npx wrangler` verwenden.
